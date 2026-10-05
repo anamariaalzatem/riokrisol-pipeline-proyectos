@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline de proyectos · Riokrisol (boceto)</title>
+<!--
+  BOCETO AISLADO — solo revisión visual. No toca screens/ ni public/js/ ni la base. Sin fetch. Enlaza tokens.css REAL.
+  Propuesta: la pestaña Proyectos pasa a ser dos tableros tipo Monday sobre las mismas franjas por título.
+   - Comercial: cada ficha es una OPORTUNIDAD ligada a un título (negocio con el titular) o a un subcontrato
+     (negocio con un grupo de mineros). Etapas Prospecto → … → Ganado / Perdido.
+   - Operación: cada ficha es un SUBCONTRATO con diagnóstico. Aparece al ganar la oportunidad.
+  Arrastrar = cambiar de etapa dentro de la franja de su título. Ganado pide qué entra a operación; Perdido pide el motivo.
+  Todos los nombres, expedientes y valores son ficticios.
+-->
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* tokens.css de la plataforma, copiado para que la página no dependa del repo privado */
+/* B PLANT — tokens de diseño, tema claro estilo plataforma SaaS moderna
+   (referencia: HubSpot — sidebar de navegación, superficies claras, acento
+   naranja, tarjetas con sombra suave). Paleta validada con la skill de
+   dataviz (references/palette.md): estados crítico/serio/advertencia/bueno
+   reutilizan exactamente los pasos de esa paleta de estado. Fuentes
+   autohospedadas, sin CDN. */
+
+
+:root{
+  /* superficies */
+  --bed:#F5F8FA;        /* plano de página */
+  --panel:#FFFFFF;      /* tarjetas */
+  --panel-2:#F5F8FA;    /* superficie secundaria / hover */
+  --line:#E2E8F0;       /* borde fino */
+
+  /* tinta */
+  --ink:#33475B;         /* texto principal — navy */
+  --ink-dim:#7C98B6;     /* texto secundario */
+  --ink-soft:#516F90;    /* intermedio, para subtítulos */
+
+  /* acento — naranja como acción primaria, azul como info/enlace */
+  --agua:#FF7A59;        /* acción primaria (nombre histórico del token, ver nota abajo) */
+  --agua-ink:#C9391E;    /* texto sobre fondos claros de acento naranja */
+  --azul:#2A78D6;        /* enlaces, info */
+  --veta:#FAB219;        /* advertencia / atención */
+  --falla:#D03B3B;       /* crítico */
+  --serio:#EC835A;       /* alto (serious) */
+  --ok:#0CA30C;          /* bueno / bajo riesgo */
+
+  --r:10px;
+  --r-sm:6px;
+  --r-lg:14px;
+  --r-pill:999px;
+  --shadow-sm:0 1px 2px rgba(15,23,42,.06);
+  --shadow-md:0 2px 8px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 2px 6px rgba(15,23,42,.06);
+
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'IBM Plex Sans',system-ui,sans-serif;
+  --disp:'Archivo',system-ui,sans-serif;
+
+  /* sidebar */
+  --sidebar-bg:#213343;
+  --sidebar-bg-2:#2C4257;
+  --sidebar-ink:#B0C1D4;
+  --sidebar-ink-active:#FFFFFF;
+  --sidebar-w:248px;
+
+  /* espaciado — múltiplos de 4px, nombrados por escala no por valor para
+     que sobrevivan si el número cambia (propuesto por el boceto del
+     Cronograma Maestro, mockups/cronograma-maestro/, 2026-09-22; hallazgo
+     de diseño: screens.css usaba 17 valores de font-size y márgenes de
+     sección sin ningún criterio — ver docs/contexto/decisiones.md). Puras
+     adiciones: nada existente referencia estos tokens todavía. */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+  --space-6:32px;
+  --space-7:48px;
+
+  /* tipografía por rol, mismo criterio de nombrar por escala */
+  --text-2xs:10.5px;   /* etiquetas de columna, mayúsculas */
+  --text-xs:11.5px;    /* metadatos, mono */
+  --text-sm:12.5px;    /* texto secundario, badges */
+  --text-base:14px;    /* cuerpo de tabla/tarjeta */
+  --text-md:15px;      /* cuerpo estándar (ya es el body real, ver arriba) */
+  --text-lg:17px;      /* subtítulos de tarjeta */
+  --text-xl:20px;      /* h3 de sección dentro de una vista */
+
+  /* color por componente (8) — mismos valores hex que ya usaban los bares
+     SVG del Gantt (screens.css: .bar-geo..bar-soc), promovidos a token
+     para que cualquier pantalla los reuse sin reinventar el hex (hallazgo
+     del boceto: .comp-dot nunca tuvo color por componente, solo
+     --ink-dim fijo — bug chico, corregido de paso en screens.css). */
+  --c-geo:#6C8AE4;
+  --c-min:#8A7BD8;
+  --c-met:#4FA8A0;
+  --c-sst:#E4A93C;
+  --c-amb:#5FB07A;
+  --c-emp:#C98BC0;
+  --c-jur:#D97B6C;
+  --c-soc:#7FA3C4;
+}
+/* Nota: --agua conserva su nombre histórico (fase 1, tema oscuro con acento
+   agua/teal) para no reescribir cada selector de screens.css; en el tema
+   claro actual representa el naranja de acción primaria de la marca. */
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bed);
+  color:var(--ink);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+
+/* ---------- shell: sidebar + contenido ---------- */
+.app-shell{display:flex;min-height:100vh}
+
+.sidebar{
+  width:var(--sidebar-w);flex:0 0 var(--sidebar-w);
+  background:var(--sidebar-bg);color:var(--sidebar-ink);
+  display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;overflow-y:auto;
+}
+.sidebar-logo{
+  padding:22px 22px 18px;font-family:var(--disp);font-weight:800;letter-spacing:.08em;font-size:18px;color:#fff;
+  display:flex;align-items:center;gap:2px;
+}
+.sidebar-logo b{color:var(--agua)}
+.sidebar-logo span{
+  display:block;font-family:var(--sans);font-weight:400;letter-spacing:0;font-size:11px;color:var(--sidebar-ink);
+  margin-top:3px;line-height:1.4;
+}
+.sidebar-nav{flex:1;padding:6px 12px;display:flex;flex-direction:column;gap:2px}
+.nav-item{
+  display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:var(--r-sm);
+  color:var(--sidebar-ink);text-decoration:none;font-size:13.5px;font-weight:500;
+  transition:background .15s,color .15s;
+}
+.nav-item svg{flex:0 0 18px;width:18px;height:18px;opacity:.85}
+.nav-item:hover{background:var(--sidebar-bg-2);color:#fff}
+.nav-item[aria-current="true"]{background:var(--agua);color:#fff;font-weight:600}
+.nav-item[aria-current="true"] svg{opacity:1}
+.nav-item .n{
+  font-family:var(--mono);font-size:10px;opacity:.6;min-width:14px;
+}
+.nav-item[aria-current="true"] .n{opacity:.85}
+.nav-item.soon{opacity:.5;cursor:default;position:relative}
+.nav-item.soon:hover{background:none;color:var(--sidebar-ink)}
+.soon-badge{
+  margin-left:auto;font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 6px;border-radius:20px;background:rgba(255,255,255,.1);white-space:nowrap;
+}
+.nav-substeps{display:flex;flex-direction:column;gap:1px;padding:2px 0 6px 41px;margin-bottom:2px}
+.nav-substep{
+  display:flex;align-items:center;gap:9px;
+  padding:6px 10px;border-radius:var(--r-sm);color:var(--sidebar-ink);text-decoration:none;
+  font-size:12px;opacity:.75;transition:background .15s,color .15s,opacity .15s;
+}
+.nav-substep .n{font-family:var(--mono);font-size:9.5px;color:#fff;opacity:.55;min-width:13px}
+.nav-substep:hover{background:var(--sidebar-bg-2);color:#fff;opacity:1}
+.nav-substep:hover .n{opacity:.9}
+.nav-substep[aria-current="true"]{background:rgba(255,255,255,.12);color:#fff;font-weight:600;opacity:1}
+.nav-substep[aria-current="true"] .n{opacity:1}
+.sidebar-footer{padding:14px 12px 18px;border-top:1px solid rgba(255,255,255,.08)}
+.sidebar-footer .nav-item{font-size:12.5px;color:var(--sidebar-ink)}
+.sidebar-demo-tag{
+  margin:0 12px 10px;padding:6px 10px;border-radius:var(--r-sm);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:var(--veta);
+  border:1px solid rgba(250,178,25,.35);background:rgba(250,178,25,.08);
+}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{
+  position:sticky;top:0;z-index:15;background:rgba(245,248,250,.92);backdrop-filter:blur(6px);
+  border-bottom:1px solid var(--line);padding:14px 32px;
+}
+
+.wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 32px 80px}
+
+/* ---------- banner de conectividad ---------- */
+.conn-banner{
+  text-align:center;font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;
+  padding:8px 12px;
+}
+.conn-banner.offline{background:#FFF6E5;color:#92610A;border-bottom:1px solid #F5D68C}
+.conn-banner.syncing{background:#E9F7EF;color:#0A7A2E;border-bottom:1px solid #9EDDB6}
+.conn-banner[hidden]{display:none}
+
+/* ---------- pantallas ---------- */
+.screen{padding-top:36px;animation:in .35s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--agua);margin-bottom:12px;font-weight:600}
+h1{font-family:var(--disp);font-weight:800;font-size:clamp(30px,4.4vw,48px);line-height:1.08;letter-spacing:-.02em;color:var(--ink)}
+h2{font-family:var(--disp);font-weight:700;font-size:24px;letter-spacing:-.01em;margin-bottom:6px;color:var(--ink)}
+h3{font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:0;color:var(--ink)}
+.lead{color:var(--ink-soft);font-size:16.5px;max-width:58ch;margin-top:16px;line-height:1.6}
+.sub{color:var(--ink-soft);font-size:13.5px;margin-bottom:22px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px;box-shadow:var(--shadow-sm)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* botones */
+.btn{
+  font-family:var(--sans);font-weight:600;font-size:14px;
+  background:var(--agua);color:#fff;border:none;border-radius:var(--r-sm);
+  padding:11px 20px;cursor:pointer;transition:.15s;text-decoration:none;display:inline-block;
+  box-shadow:0 1px 2px rgba(255,122,89,.25);
+}
+.btn:hover{filter:brightness(1.06);box-shadow:0 4px 10px rgba(255,122,89,.32);transform:translateY(-1px)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow-sm)}
+.btn.ghost:hover{border-color:var(--agua);color:var(--agua-ink);filter:none;box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.btn:focus-visible,.opt:focus-visible,.nav-item:focus-visible{outline:2px solid var(--agua);outline-offset:2px}
+.btn.is-disabled,.btn[disabled]{opacity:.45;cursor:not-allowed;pointer-events:none;transform:none;box-shadow:none}
+.actions{display:flex;gap:10px;margin-top:32px;flex-wrap:wrap}
+
+.toast{
+  position:fixed;bottom:26px;left:50%;transform:translate(-50%,120%);
+  background:var(--ink);color:#fff;border-radius:var(--r-sm);
+  padding:13px 20px;font-size:13.5px;z-index:60;transition:.35s;box-shadow:var(--shadow-lg);
+}
+.toast.on{transform:translate(-50%,0)}
+.toast b{color:#FFB49B}
+
+.note{
+  margin-top:44px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--r);
+  font-family:var(--mono);font-size:11px;color:var(--ink-soft);line-height:1.7;background:var(--panel-2);
+}
+.note b{color:var(--agua-ink)}
+
+</style>
+<style>
+  body{background:var(--bed)}
+  .mock-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;background:var(--sidebar-bg);color:#fff;flex-wrap:wrap}
+  .mock-brand{font-family:var(--disp);font-weight:800;letter-spacing:.04em}
+  .mock-brand b{color:var(--agua)}
+  .mock-flag{font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.06em;color:var(--veta);border:1px solid rgba(250,178,25,.4);padding:4px 8px;border-radius:var(--r-sm)}
+  .mock-wrap{padding:24px;max-width:100%}
+
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:var(--space-4)}
+  .head h2{margin:0}
+  .head .sub{margin:2px 0 0}
+  .head-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn.sm{padding:8px 14px;font-size:13px}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:var(--space-4)}
+  .tab{background:none;border:none;padding:10px 16px;font:600 14px var(--sans);color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--agua)}
+  .tab .count{font-family:var(--mono);font-size:var(--text-2xs);background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-pill);padding:1px 7px;margin-left:6px;color:var(--ink-soft)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;margin-bottom:var(--space-4)}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow-sm)}
+  .kpi .k-lab{font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-dim)}
+  .kpi .k-val{font-family:var(--disp);font-weight:800;font-size:22px;margin-top:2px}
+  .kpi .k-hint{font-size:var(--text-xs);color:var(--ink-soft)}
+  @media(max-width:860px){.kpis{grid-template-columns:1fr 1fr}}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:var(--space-3)}
+  .filters input,.filters select{font:13px var(--sans);padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-sm);background:#fff;color:var(--ink)}
+  .filters input{min-width:220px}
+  .filters label{font-size:var(--text-sm);color:var(--ink-soft);display:flex;gap:6px;align-items:center}
+
+  /* tablero: franjas por título × columnas por etapa */
+  .board-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow-sm)}
+  .board{display:grid;min-width:max-content}
+  .col-head{position:sticky;top:0;z-index:3;background:var(--panel-2);border-bottom:1px solid var(--line);padding:10px 12px;font-family:var(--mono);font-size:var(--text-2xs);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);display:flex;justify-content:space-between;gap:8px}
+  .col-head .n{color:var(--ink-dim)}
+  .col-head.won{color:var(--ok)} .col-head.lost{color:var(--ink-dim)}
+  .col-head .sum{display:block;font-family:var(--sans);text-transform:none;letter-spacing:0;font-size:var(--text-xs);color:var(--ink-dim);margin-top:2px}
+  .corner{position:sticky;left:0;z-index:4}
+
+  .lane-head{position:sticky;left:0;z-index:2;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:12px;cursor:pointer}
+  .lane-head:hover{background:var(--panel-2)}
+  .lane-code{font-family:var(--mono);font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px}
+  .lane-code .chev{display:inline-block;transition:transform .15s;color:var(--ink-dim)}
+  .lane.collapsed .chev{transform:rotate(-90deg)}
+  .lane-holder{font-size:var(--text-sm);color:var(--ink);margin-top:2px;font-weight:600}
+  .lane-meta{font-size:var(--text-xs);color:var(--ink-dim);margin-top:2px}
+  .lane-stats{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .lane-add{margin-top:8px;font-size:var(--text-xs);color:var(--azul);background:none;border:none;cursor:pointer;padding:0;font-weight:600}
+  .lane-add:hover{text-decoration:underline}
+
+  .cell{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:8px;min-height:88px;display:flex;flex-direction:column;gap:8px;transition:background .12s}
+  .cell.over{background:#FFF1EC;outline:2px dashed var(--agua);outline-offset:-4px}
+  .cell.blocked{background:repeating-linear-gradient(45deg,transparent 0 6px,rgba(124,152,182,.08) 6px 12px)}
+  .cell.won{background:#F3FBF3} .cell.lost{background:#FAFBFC}
+  .lane.collapsed .cell{min-height:36px}
+  .lane.collapsed .cell .card-x{display:none}
+  .lane.collapsed .cell .mini{display:inline-flex}
+  .mini{display:none;font-family:var(--mono);font-size:var(--text-2xs);color:var(--ink-dim)}
+
+  /* fichas */
+  .card-x{background:#fff;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;box-shadow:var(--shadow-sm);cursor:grab;font-size:var(--text-sm);position:relative;border-left:3px solid var(--line)}
+  .card-x:hover{box-shadow:var(--shadow-md);border-color:#CBD6E2}
+  .card-x.dragging{opacity:.4}
+  .card-x.k-title{border-left-color:var(--azul)}
+  .card-x.k-sub{border-left-color:var(--c-emp)}
+  .cx-top{display:flex;justify-content:space-between;align-items:center;gap:6px}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:var(--r-pill);font-weight:600}
+  .tag.t-title{background:#E8F1FC;color:#1C5DAA}
+  .tag.t-sub{background:#F7EDF6;color:#8B4C82}
+  .tag.t-direct{background:#EEF2F6;color:var(--ink-soft)}
+  .prob{font-family:var(--mono);font-size:var(--text-xs);color:var(--ink-soft)}
+  .cx-name{font-weight:600;color:var(--ink);margin-top:6px;line-height:1.3}
+  .cx-svc{color:var(--ink-soft);font-size:var(--text-xs);margin-top:2px}
+  .cx-val{font-family:var(--mono);font-weight:600;margin-top:6px}
+  .cx-val small{font-family:var(--sans);font-weight:400;color:var(--ink-dim);margin-left:4px}
+  .cx-next{margin-top:6px;font-size:var(--text-xs);color:var(--ink-soft);display:flex;gap:4px}
+  .cx-next.late{color:var(--falla);font-weight:600}
+  .cx-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:var(--text-xs);color:var(--ink-dim)}
+  .avatar{width:22px;height:22px;border-radius:50%;background:var(--sidebar-bg-2);color:#fff;font:600 9.5px var(--mono);display:inline-flex;align-items:center;justify-content:center}
+  .cx-link{color:var(--azul);font-weight:600;cursor:pointer;background:none;border:none;padding:0;font-size:var(--text-xs)}
+  .cx-lost{font-size:var(--text-xs);color:var(--ink-dim);margin-top:6px;font-style:italic}
+
+  .bar{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden;margin-top:6px}
+  .bar i{display:block;height:100%;background:var(--azul)}
+  .chip{font-size:var(--text-2xs);font-weight:600;padding:2px 7px;border-radius:var(--r-pill);border:1px solid transparent;white-space:nowrap}
+  .r-crit{background:#FBE9E9;color:#A12727;border-color:#F2C4C4}
+  .r-high{background:#FDEEE6;color:#A4502B;border-color:#F6CDB8}
+  .r-med{background:#FFF6E0;color:#8A6106;border-color:#F5DE9E}
+  .r-low{background:#E7F6E7;color:#0A7A0A;border-color:#BFE5BF}
+  .r-none{background:var(--panel-2);color:var(--ink-dim);border-color:var(--line)}
+  .chip.autos{background:#FBE9E9;color:#A12727}
+
+  .empty-cell{font-size:var(--text-xs);color:var(--ink-dim);text-align:center;margin:auto 0;opacity:0}
+  .cell.over .empty-cell{opacity:1}
+
+  /* panel lateral */
+  .scrim{position:fixed;inset:0;background:rgba(33,51,67,.35);z-index:40;opacity:0;pointer-events:none;transition:.2s}
+  .scrim.on{opacity:1;pointer-events:auto}
+  .panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:var(--panel);z-index:41;box-shadow:var(--shadow-lg);transform:translateX(100%);transition:.25s;display:flex;flex-direction:column}
+  .panel.on{transform:none}
+  .p-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .p-head h3{font-size:var(--text-lg)}
+  .p-head .p-sub{font-size:var(--text-xs);color:var(--ink-dim);font-family:var(--mono);margin-top:2px}
+  .p-close{background:none;border:none;font-size:22px;line-height:1;color:var(--ink-dim);cursor:pointer}
+  .p-body{padding:18px 20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px}
+  .p-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .f{display:flex;flex-direction:column;gap:4px}
+  .f > span{font-size:var(--text-xs);font-weight:600;color:var(--ink-soft)}
+  .f input,.f select,.f textarea{font:14px var(--sans);padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-sm);color:var(--ink);background:#fff;width:100%}
+  .f textarea{min-height:64px;resize:vertical}
+  .f .hint{font-size:var(--text-xs);color:var(--ink-dim);font-weight:400}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .checks{display:flex;flex-wrap:wrap;gap:6px}
+  .checks label{display:flex;align-items:center;gap:6px;font-size:13px;border:1px solid var(--line);border-radius:var(--r-pill);padding:5px 10px;cursor:pointer}
+  .checks input{accent-color:var(--agua)}
+  .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+  .seg label{text-align:center;padding:9px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink-soft)}
+  .seg input{display:none}
+  .seg label:has(input:checked){background:var(--ink);color:#fff}
+  .btn.danger{background:#fff;color:var(--falla);border:1px solid #F2C4C4;box-shadow:none}
+  .btn.danger:hover{background:#FBE9E9;filter:none}
+  .btn.danger[disabled]{opacity:.45}
+  .p-note{font-size:var(--text-xs);color:var(--ink-soft);background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;line-height:1.5}
+  .p-list{display:flex;flex-direction:column;gap:6px}
+  .p-list .it{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;font-size:13px}
+  .p-list .it small{color:var(--ink-dim);display:block}
+  .confirm-box{border:1px solid #F2C4C4;background:#FDF5F5;border-radius:var(--r-sm);padding:10px;font-size:13px;display:none}
+  .confirm-box.on{display:block}
+  .confirm-box .actions{margin-top:8px}
+
+  /* modal (ganado / perdido) */
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:50;background:rgba(33,51,67,.45);padding:16px}
+  .modal.on{display:flex}
+  .modal-card{background:#fff;border-radius:var(--r-lg);box-shadow:var(--shadow-lg);width:min(480px,100%);padding:22px;display:flex;flex-direction:column;gap:14px}
+  .modal-card h3{font-size:var(--text-lg)}
+  .modal-card .p-sub{font-size:var(--text-sm);color:var(--ink-soft)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+  .win-badge{width:40px;height:40px;border-radius:50%;background:#E7F6E7;color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:20px}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:var(--text-xs);color:var(--ink-soft);margin-top:var(--space-3)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="mock-topbar">
+  <div class="mock-brand">Riokrisol <b>·</b> Proyectos</div>
+  <div class="mock-flag">BOCETO — solo revisión visual, no conectado al sistema · datos ficticios</div>
+</div>
+
+<main class="mock-wrap">
+  <div class="head">
+    <div>
+      <h2>Proyectos</h2>
+      <p class="sub">Cada franja es un título minero; sus subcontratos viven adentro. Arrastrá una ficha para cambiarla de etapa.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost sm" type="button" id="btn-new-title">+ Título</button>
+      <button class="btn sm" type="button" id="btn-new-main">+ Oportunidad</button>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="com" aria-selected="true">Comercial <span class="count" id="count-com"></span></button>
+    <button class="tab" role="tab" data-tab="ops" aria-selected="false">Operación <span class="count" id="count-ops"></span></button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="filters">
+    <input type="search" id="q" placeholder="Buscar título, titular, minero o municipio…">
+    <label>Responsable <select id="f-owner"><option value="">Todos</option></select></label>
+    <label>Municipio <select id="f-mun"><option value="">Todos</option></select></label>
+    <button class="btn ghost sm" type="button" id="btn-collapse">Contraer franjas</button>
+  </div>
+
+  <div class="board-scroll"><div class="board" id="board"></div></div>
+
+  <div class="legend" id="legend"></div>
+
+  <div class="note">
+    <b>Qué mirar en este boceto:</b> (1) las franjas por título con sus subcontratos adentro; (2) arrastrar una ficha a otra columna de SU franja
+    (no se puede pasar a otro título); (3) soltar en <b>Ganado</b>: pregunta qué subcontratos entran a operación y los crea en la pestaña Operación;
+    (4) soltar en <b>Perdido</b>: pide el motivo; (5) clic en una ficha o en la cabecera de un título abre el panel para editar o eliminar;
+    (6) un título con subcontratos no se puede eliminar. En el sistema real, eliminar un subcontrato con diagnóstico pedirá el código por correo, como hoy.
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true">
+  <div class="p-head"><div><h3 id="p-title"></h3><div class="p-sub" id="p-sub"></div></div><button class="p-close" id="p-close" aria-label="Cerrar">×</button></div>
+  <div class="p-body" id="p-body"></div>
+  <div class="p-foot" id="p-foot"></div>
+</aside>
+
+<div class="modal" id="modal"><div class="modal-card" id="modal-card"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TODAY = '2026-10-05';
+  var COM_STAGES = [
+    { id: 'prospect', label: 'Prospecto' },
+    { id: 'contacted', label: 'Contactado' },
+    { id: 'meeting', label: 'Reunión / visita inicial' },
+    { id: 'proposal', label: 'Propuesta enviada' },
+    { id: 'negotiation', label: 'Negociación' },
+    { id: 'won', label: 'Ganado', cls: 'won' },
+    { id: 'lost', label: 'Perdido', cls: 'lost' }
+  ];
+  var OPS_STAGES = [
+    { id: 'diagnosis', label: 'Diagnóstico' },
+    { id: 'formalization', label: 'Formalización' },
+    { id: 'incubation', label: 'Incubación' },
+    { id: 'acceleration', label: 'Aceleración' },
+    { id: 'graduated', label: 'Graduado', cls: 'won' },
+    { id: 'dropped', label: 'Retirado', cls: 'lost' }
+  ];
+  var SERVICES = ['Formalización', 'Incubación', 'Aceleración'];
+  var PAYMENT = ['Honorarios', 'Participación accionaria', 'Pago por éxito', 'Mixto'];
+  var OWNERS = ['Ana María Alzate', 'Carlos Rendón', 'Luisa Gómez'];
+  var LOST_REASONS = ['Precio', 'Eligió a otro operador', 'El titular no autoriza', 'Mineros no se asocian', 'Problema jurídico del título', 'Sin respuesta', 'Otro'];
+
+  // ---------------- datos ficticios ----------------
+  var titles = [
+    { id: 1, code: 'HCK-08261', holder: 'Minera La Esperanza S.A.S.', mun: 'Segovia', dep: 'Antioquia', mineral: 'Oro', notes: '' },
+    { id: 2, code: 'OG2-10141', holder: 'Gerardo Restrepo (persona natural)', mun: 'Remedios', dep: 'Antioquia', mineral: 'Oro', notes: 'Titular abierto a subcontratar 3 frentes.' },
+    { id: 3, code: 'LH0-07102', holder: 'Mineros del Cauca S.A.S.', mun: 'Buriticá', dep: 'Antioquia', mineral: 'Oro y plata', notes: '' },
+    { id: 4, code: 'RKP-12003', holder: 'Inversiones Aurífera del Nus', mun: 'Zaragoza', dep: 'Antioquia', mineral: 'Oro', notes: '' }
+  ];
+  var subs = [
+    { id: 11, titleId: 1, number: 'Sub. 001-2024', miner: 'Asociación El Porvenir', direct: false, owner: 'Ana María Alzate', hasDiag: true, opStage: 'formalization', maturity: 42, risk: 'high', autosLate: 1 },
+    { id: 12, titleId: 1, number: 'Sub. 002-2024', miner: 'Frente La Cruzada', direct: false, owner: 'Carlos Rendón', hasDiag: true, opStage: 'diagnosis', maturity: 18, risk: 'crit', autosLate: 1 },
+    { id: 13, titleId: 1, number: 'Sub. 003-2025', miner: 'Grupo Los Naranjos', direct: false, owner: 'Ana María Alzate', hasDiag: true, opStage: 'incubation', maturity: 61, risk: 'med', autosLate: 0 },
+    { id: 21, titleId: 2, number: 'Frente 1', miner: 'Mineros de La Salada', direct: false, owner: '', hasDiag: false },
+    { id: 22, titleId: 2, number: 'Frente 2', miner: 'Mineros El Tigre', direct: false, owner: '', hasDiag: false },
+    { id: 31, titleId: 3, number: 'Sub. 014-2023', miner: 'Cooperativa Santa Rita', direct: false, owner: 'Luisa Gómez', hasDiag: true, opStage: 'acceleration', maturity: 74, risk: 'low', autosLate: 0 },
+    { id: 32, titleId: 3, number: 'Sub. 019-2025', miner: 'Asomineros Higabra', direct: false, owner: '', hasDiag: false },
+    { id: 41, titleId: 4, number: 'Operación directa', miner: 'Inversiones Aurífera del Nus', direct: true, owner: '', hasDiag: false }
+  ];
+  var deals = [
+    { id: 101, titleId: 1, subId: null, kind: 'title', services: ['Formalización'], value: 120000000, pay: 'Honorarios', prob: 100, close: '2025-02-10', owner: 'Ana María Alzate', next: '', nextDate: '', stage: 'won', lostReason: '' },
+    { id: 102, titleId: 1, subId: 13, kind: 'sub', services: ['Incubación'], value: 35000000, pay: 'Pago por éxito', prob: 100, close: '2025-08-01', owner: 'Ana María Alzate', next: '', nextDate: '', stage: 'won', lostReason: '' },
+    { id: 103, titleId: 1, subId: 11, kind: 'sub', services: ['Aceleración'], value: 60000000, pay: 'Participación accionaria', prob: 50, close: '2026-11-30', owner: 'Carlos Rendón', next: 'Enviar modelo de participación', nextDate: '2026-10-09', stage: 'negotiation', lostReason: '' },
+    { id: 201, titleId: 2, subId: null, kind: 'title', services: ['Formalización', 'Incubación'], value: 90000000, pay: 'Mixto', prob: 40, close: '2026-12-15', owner: 'Ana María Alzate', next: 'Visita a los 2 frentes', nextDate: '2026-10-01', stage: 'meeting', lostReason: '' },
+    { id: 202, titleId: 2, subId: 22, kind: 'sub', services: ['Formalización'], value: 25000000, pay: 'Honorarios', prob: 20, close: '2027-01-30', owner: 'Luisa Gómez', next: 'Llamar al líder del frente', nextDate: '2026-10-12', stage: 'contacted', lostReason: '' },
+    { id: 301, titleId: 3, subId: 32, kind: 'sub', services: ['Formalización'], value: 30000000, pay: 'Honorarios', prob: 60, close: '2026-10-31', owner: 'Luisa Gómez', next: 'Ajustar propuesta según visita', nextDate: '2026-10-07', stage: 'proposal', lostReason: '' },
+    { id: 302, titleId: 3, subId: 31, kind: 'sub', services: ['Aceleración'], value: 80000000, pay: 'Participación accionaria', prob: 100, close: '2026-03-01', owner: 'Luisa Gómez', next: '', nextDate: '', stage: 'won', lostReason: '' },
+    { id: 401, titleId: 4, subId: 41, kind: 'title', services: ['Aceleración'], value: 150000000, pay: 'Participación accionaria', prob: 10, close: '2027-03-01', owner: 'Carlos Rendón', next: 'Primer contacto con gerente', nextDate: '2026-10-20', stage: 'prospect', lostReason: '' },
+    { id: 402, titleId: 4, subId: null, kind: 'title', services: ['Formalización'], value: 40000000, pay: 'Honorarios', prob: 0, close: '2026-06-30', owner: 'Carlos Rendón', next: '', nextDate: '', stage: 'lost', lostReason: 'Eligió a otro operador' }
+  ];
+  var nextId = 1000;
+
+  var state = { tab: 'com', q: '', owner: '', mun: '', collapsed: {}, allCollapsed: false };
+
+  // ---------------- utilidades ----------------
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+  function fmtMoney(v) { return money.format(v || 0); }
+  function fmtShort(v) { return v >= 1e9 ? '$ ' + (v / 1e9).toFixed(1).replace('.', ',') + ' mil M' : '$ ' + Math.round(v / 1e6) + ' M'; }
+  var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  function fmtDate(d) { if (!d) return ''; var p = d.split('-'); return p[2] + ' ' + MONTHS[+p[1] - 1] + (p[0] !== TODAY.slice(0, 4) ? ' ' + p[0] : ''); }
+  function initials(n) { return n ? n.split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase() : '—'; }
+  function titleById(id) { return titles.find(function (t) { return t.id === id; }); }
+  function subById(id) { return subs.find(function (s) { return s.id === id; }); }
+  function say(msg) { var t = $('toast'); t.innerHTML = msg; t.classList.add('on'); clearTimeout(say.t); say.t = setTimeout(function () { t.classList.remove('on'); }, 3200); }
+  var RISK = { crit: ['r-crit', 'Crítico'], high: ['r-high', 'Alto'], med: ['r-med', 'Medio'], low: ['r-low', 'Bajo'] };
+  var RISK_ORDER = { crit: 4, high: 3, med: 2, low: 1 };
+
+  function dealLabel(d) {
+    if (d.kind === 'title') return titleById(d.titleId).holder;
+    var s = subById(d.subId); return s ? (s.direct ? 'Operación directa' : s.number + ' · ' + s.miner) : '';
+  }
+
+  function matches(t, extra) {
+    var q = state.q.trim().toLowerCase();
+    if (state.mun && t.mun !== state.mun) return false;
+    if (!q) return true;
+    var hay = [t.code, t.holder, t.mun, t.mineral].concat(extra || []).join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
+  // ---------------- render ----------------
+  function render() {
+    document.querySelectorAll('.tab').forEach(function (b) { b.setAttribute('aria-selected', b.dataset.tab === state.tab ? 'true' : 'false'); });
+    $('count-com').textContent = deals.filter(function (d) { return d.stage !== 'won' && d.stage !== 'lost'; }).length + ' abiertas';
+    $('count-ops').textContent = subs.filter(function (s) { return s.hasDiag; }).length + ' en curso';
+    $('btn-new-main').textContent = state.tab === 'com' ? '+ Oportunidad' : '+ Subcontrato';
+    renderKpis();
+    renderBoard();
+    renderLegend();
+  }
+
+  function renderKpis() {
+    var el = $('kpis');
+    if (state.tab === 'com') {
+      var open = deals.filter(function (d) { return d.stage !== 'won' && d.stage !== 'lost'; });
+      var total = open.reduce(function (a, d) { return a + d.value; }, 0);
+      var weighted = open.reduce(function (a, d) { return a + d.value * d.prob / 100; }, 0);
+      var wonMonth = deals.filter(function (d) { return d.stage === 'won' && d.close && d.close.slice(0, 7) === TODAY.slice(0, 7); });
+      var closed = deals.filter(function (d) { return d.stage === 'won' || d.stage === 'lost'; });
+      var won = closed.filter(function (d) { return d.stage === 'won'; }).length;
+      var late = open.filter(function (d) { return d.nextDate && d.nextDate < TODAY; }).length;
+      el.innerHTML =
+        kpi('En curso', fmtShort(total), open.length + ' oportunidades abiertas') +
+        kpi('Ponderado por probabilidad', fmtShort(weighted), 'lo que se espera cerrar') +
+        kpi('Ganado este mes', wonMonth.length ? fmtShort(wonMonth.reduce(function (a, d) { return a + d.value; }, 0)) : '$ 0', wonMonth.length + ' negocios') +
+        kpi('Tasa de cierre', closed.length ? Math.round(won / closed.length * 100) + ' %' : '—', late ? '<span style="color:var(--falla);font-weight:600">' + late + ' con próxima acción vencida</span>' : 'sin acciones vencidas');
+    } else {
+      var act = subs.filter(function (s) { return s.hasDiag; });
+      var avg = act.length ? Math.round(act.reduce(function (a, s) { return a + (s.maturity || 0); }, 0) / act.length) : 0;
+      var crit = act.filter(function (s) { return s.risk === 'crit' || s.risk === 'high'; }).length;
+      var autos = act.reduce(function (a, s) { return a + (s.autosLate || 0); }, 0);
+      el.innerHTML =
+        kpi('Subcontratos en operación', act.length, titles.filter(function (t) { return act.some(function (s) { return s.titleId === t.id; }); }).length + ' títulos') +
+        kpi('Madurez promedio', avg + ' / 100', 'de los diagnósticos en curso') +
+        kpi('Riesgo alto o crítico', crit, 'subcontratos') +
+        kpi('Autos de la ANM vencidos', autos, autos ? '<span style="color:var(--falla);font-weight:600">revisar en Jurídico</span>' : 'al día');
+    }
+  }
+  function kpi(l, v, h) { return '<div class="kpi"><div class="k-lab">' + l + '</div><div class="k-val">' + v + '</div><div class="k-hint">' + h + '</div></div>'; }
+
+  function renderLegend() {
+    $('legend').innerHTML = state.tab === 'com'
+      ? '<span><i style="background:var(--azul)"></i>Negocio con el titular del título</span><span><i style="background:var(--c-emp)"></i>Negocio con un subcontrato</span><span><i style="background:var(--falla)"></i>Próxima acción vencida</span>'
+      : '<span>Cada ficha es un subcontrato con diagnóstico. Clic en "Abrir diagnóstico" lleva a sus pantallas de siempre (cuestionario, visita, plan).</span>';
+  }
+
+  function renderBoard() {
+    var stages = state.tab === 'com' ? COM_STAGES : OPS_STAGES;
+    var board = $('board');
+    board.style.gridTemplateColumns = '240px repeat(' + stages.length + ', 232px)';
+    var html = '<div class="col-head corner">Título / titular</div>';
+    stages.forEach(function (st) {
+      var items = state.tab === 'com' ? deals.filter(function (d) { return d.stage === st.id && visibleDeal(d); }) : subs.filter(function (s) { return s.hasDiag && s.opStage === st.id && visibleSub(s); });
+      var sum = state.tab === 'com' && st.id !== 'lost' ? '<span class="sum">' + fmtShort(items.reduce(function (a, d) { return a + d.value; }, 0)) + '</span>' : '';
+      html += '<div class="col-head ' + (st.cls || '') + '"><div>' + st.label + sum + '</div><span class="n">' + items.length + '</span></div>';
+    });
+
+    var shown = 0;
+    titles.forEach(function (t) {
+      var tSubs = subs.filter(function (s) { return s.titleId === t.id; });
+      var lane, laneItems;
+      if (state.tab === 'com') {
+        laneItems = deals.filter(function (d) { return d.titleId === t.id && visibleDeal(d); });
+        if (!matches(t, tSubs.map(function (s) { return s.miner + ' ' + s.number; }))) return;
+        if (state.owner && !laneItems.length) return;
+      } else {
+        laneItems = tSubs.filter(function (s) { return s.hasDiag && visibleSub(s); });
+        if (!laneItems.length) return;
+        if (!matches(t, tSubs.map(function (s) { return s.miner + ' ' + s.number; }))) return;
+      }
+      shown++;
+      var collapsed = state.collapsed[t.id];
+      html += '<div class="lane' + (collapsed ? ' collapsed' : '') + '" style="display:contents">';
+      html += laneHead(t, tSubs);
+      stages.forEach(function (st) {
+        var inCell = state.tab === 'com'
+          ? laneItems.filter(function (d) { return d.stage === st.id; })
+          : laneItems.filter(function (s) { return s.opStage === st.id; });
+        html += '<div class="cell ' + (st.cls || '') + '" data-title="' + t.id + '" data-stage="' + st.id + '">';
+        inCell.forEach(function (it) { html += state.tab === 'com' ? dealCard(it) : subCard(it); });
+        if (inCell.length) html += '<span class="mini">' + inCell.length + ' ficha' + (inCell.length > 1 ? 's' : '') + '</span>';
+        html += '<div class="empty-cell">Soltar aquí</div></div>';
+      });
+      html += '</div>';
+    });
+    if (!shown) html += '<div style="grid-column:1/-1;padding:32px;text-align:center;color:var(--ink-dim)">Ningún título coincide con los filtros.</div>';
+    board.innerHTML = html;
+    wireBoard();
+  }
+
+  function visibleDeal(d) { return !state.owner || d.owner === state.owner; }
+  function visibleSub(s) { return !state.owner || s.owner === state.owner; }
+
+  function laneHead(t, tSubs) {
+    var stats = '';
+    if (state.tab === 'com') {
+      var open = deals.filter(function (d) { return d.titleId === t.id && d.stage !== 'won' && d.stage !== 'lost'; });
+      var client = deals.some(function (d) { return d.titleId === t.id && d.stage === 'won'; });
+      stats = '<span class="chip ' + (client ? 'r-low' : 'r-none') + '">' + (client ? 'Cliente' : 'Prospecto') + '</span>' +
+        (open.length ? '<span class="chip r-none">' + open.length + ' abierta' + (open.length > 1 ? 's' : '') + ' · ' + fmtShort(open.reduce(function (a, d) { return a + d.value; }, 0)) + '</span>' : '');
+    } else {
+      var act = tSubs.filter(function (s) { return s.hasDiag; });
+      var worst = act.reduce(function (w, s) { return RISK_ORDER[s.risk] > RISK_ORDER[w] ? s.risk : w; }, 'low');
+      var avg = Math.round(act.reduce(function (a, s) { return a + s.maturity; }, 0) / act.length);
+      stats = '<span class="chip r-none">Madurez ' + avg + '</span><span class="chip ' + RISK[worst][0] + '">Peor riesgo: ' + RISK[worst][1] + '</span>';
+    }
+    return '<div class="lane-head" data-lane="' + t.id + '">' +
+      '<div class="lane-code"><span class="chev" data-toggle="' + t.id + '">▾</span>' + esc(t.code) + '</div>' +
+      '<div class="lane-holder">' + esc(t.holder) + '</div>' +
+      '<div class="lane-meta">' + esc(t.mun) + ' · ' + esc(t.mineral) + ' · ' + tSubs.filter(function (s) { return !s.direct; }).length + ' subcontratos</div>' +
+      '<div class="lane-stats">' + stats + '</div>' +
+      '<button class="lane-add" type="button" data-add="' + t.id + '">' + (state.tab === 'com' ? '+ Oportunidad en este título' : '+ Subcontrato') + '</button>' +
+      '</div>';
+  }
+
+  function dealCard(d) {
+    var s = d.subId ? subById(d.subId) : null;
+    var isTitle = d.kind === 'title';
+    var tag = isTitle ? '<span class="tag t-title">Título</span>' : (s && s.direct ? '<span class="tag t-direct">Op. directa</span>' : '<span class="tag t-sub">Subcontrato</span>');
+    var late = d.nextDate && d.nextDate < TODAY && d.stage !== 'won' && d.stage !== 'lost';
+    var bottom;
+    if (d.stage === 'won') {
+      bottom = '<div class="cx-foot"><span>Ganado ' + fmtDate(d.close) + '</span><button class="cx-link" data-goto-ops="1">Ver en Operación →</button></div>';
+    } else if (d.stage === 'lost') {
+      bottom = '<div class="cx-lost">Motivo: ' + esc(d.lostReason || 'sin registrar') + '</div>';
+    } else {
+      bottom = (d.next ? '<div class="cx-next' + (late ? ' late' : '') + '">' + (late ? '⚑' : '→') + ' ' + esc(d.next) + ' · ' + fmtDate(d.nextDate) + '</div>' : '<div class="cx-next late">⚑ Sin próxima acción</div>') +
+        '<div class="cx-foot"><span class="avatar" title="' + esc(d.owner) + '">' + initials(d.owner) + '</span><span>Cierre ' + fmtDate(d.close) + '</span></div>';
+    }
+    return '<div class="card-x ' + (isTitle ? 'k-title' : 'k-sub') + '" draggable="true" data-deal="' + d.id + '" data-title="' + d.titleId + '">' +
+      '<div class="cx-top">' + tag + (d.stage !== 'won' && d.stage !== 'lost' ? '<span class="prob">' + d.prob + ' %</span>' : '') + '</div>' +
+      '<div class="cx-name">' + esc(dealLabel(d)) + '</div>' +
+      '<div class="cx-svc">' + esc(d.services.join(' · ')) + '</div>' +
+      '<div class="cx-val">' + fmtMoney(d.value) + '<small>' + esc(d.pay) + '</small></div>' +
+      bottom + '</div>';
+  }
+
+  function subCard(s) {
+    var r = RISK[s.risk] || ['r-none', '—'];
+    return '<div class="card-x k-sub" draggable="true" data-sub="' + s.id + '" data-title="' + s.titleId + '">' +
+      '<div class="cx-top">' + (s.direct ? '<span class="tag t-direct">Op. directa</span>' : '<span class="tag t-sub">' + esc(s.number) + '</span>') + '<span class="chip ' + r[0] + '">' + r[1] + '</span></div>' +
+      '<div class="cx-name">' + esc(s.miner) + '</div>' +
+      '<div class="cx-svc">Madurez ' + s.maturity + ' / 100</div><div class="bar"><i style="width:' + s.maturity + '%"></i></div>' +
+      (s.autosLate ? '<div class="cx-next late">⚑ ' + s.autosLate + ' auto' + (s.autosLate > 1 ? 's' : '') + ' de la ANM vencido' + (s.autosLate > 1 ? 's' : '') + '</div>' : '') +
+      '<div class="cx-foot"><span class="avatar" title="' + esc(s.owner || 'Sin responsable') + '">' + initials(s.owner) + '</span><button class="cx-link" data-open-diag="' + s.id + '">Abrir diagnóstico →</button></div>' +
+      '</div>';
+  }
+
+  // ---------------- arrastrar ----------------
+  var drag = null;
+  function wireBoard() {
+    var board = $('board');
+    board.querySelectorAll('.card-x').forEach(function (c) {
+      c.addEventListener('dragstart', function (e) {
+        drag = { el: c, title: +c.dataset.title, deal: c.dataset.deal ? +c.dataset.deal : null, sub: c.dataset.sub ? +c.dataset.sub : null };
+        c.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'x');
+        board.querySelectorAll('.cell').forEach(function (cell) { if (+cell.dataset.title !== drag.title) cell.classList.add('blocked'); });
+      });
+      c.addEventListener('dragend', function () {
+        c.classList.remove('dragging'); drag = null;
+        board.querySelectorAll('.cell').forEach(function (cell) { cell.classList.remove('blocked', 'over'); });
+      });
+      c.addEventListener('click', function (e) {
+        if (e.target.closest('[data-goto-ops]')) { state.tab = 'ops'; render(); return; }
+        if (e.target.closest('[data-open-diag]')) { say('En el sistema real abre <b>el diagnóstico</b> de este subcontrato (cuestionario, visita, plan).'); return; }
+        if (c.dataset.deal) openDeal(+c.dataset.deal); else openSub(+c.dataset.sub);
+      });
+    });
+    board.querySelectorAll('.cell').forEach(function (cell) {
+      cell.addEventListener('dragover', function (e) {
+        if (!drag || +cell.dataset.title !== drag.title) return;
+        e.preventDefault(); cell.classList.add('over');
+      });
+      cell.addEventListener('dragleave', function () { cell.classList.remove('over'); });
+      cell.addEventListener('drop', function (e) {
+        e.preventDefault(); cell.classList.remove('over');
+        if (!drag || +cell.dataset.title !== drag.title) return;
+        var stage = cell.dataset.stage;
+        if (drag.deal) moveDeal(drag.deal, stage); else moveSub(drag.sub, stage);
+      });
+    });
+    board.querySelectorAll('.lane-head').forEach(function (h) {
+      h.addEventListener('click', function (e) {
+        var id = +h.dataset.lane;
+        if (e.target.closest('[data-toggle]')) { state.collapsed[id] = !state.collapsed[id]; renderBoard(); return; }
+        if (e.target.closest('[data-add]')) { if (state.tab === 'com') openDeal(null, id); else openSub(null, id); return; }
+        openTitle(id);
+      });
+    });
+  }
+
+  function stageLabel(list, id) { return list.find(function (s) { return s.id === id; }).label; }
+
+  function moveDeal(id, stage) {
+    var d = deals.find(function (x) { return x.id === id; });
+    if (d.stage === stage) return;
+    if (d.stage === 'won') { say('Una oportunidad <b>ganada</b> no vuelve atrás: si hay un negocio nuevo, se crea otra oportunidad.'); return; }
+    if (stage === 'won') { askWon(d); return; }
+    if (stage === 'lost') { askLost(d); return; }
+    d.stage = stage; d.lostReason = '';
+    render(); say('Movida a <b>' + stageLabel(COM_STAGES, stage) + '</b>. Queda registrado quién la movió y cuándo.');
+  }
+  function moveSub(id, stage) {
+    var s = subById(id);
+    if (s.opStage === stage) return;
+    s.opStage = stage; render(); say(esc(s.miner) + ' → <b>' + stageLabel(OPS_STAGES, stage) + '</b>.');
+  }
+
+  // ---------------- modales Ganado / Perdido ----------------
+  function modal(html) { $('modal-card').innerHTML = html; $('modal').classList.add('on'); }
+  function closeModal() { $('modal').classList.remove('on'); }
+
+  function askWon(d) {
+    var t = titleById(d.titleId);
+    var candidates = d.kind === 'title' ? subs.filter(function (s) { return s.titleId === t.id && !s.hasDiag; }) : [subById(d.subId)].filter(function (s) { return s && !s.hasDiag; });
+    var list = candidates.length
+      ? '<div class="checks" style="flex-direction:column;align-items:stretch">' + candidates.map(function (s) {
+          return '<label><input type="checkbox" name="win-sub" value="' + s.id + '" checked> ' + esc(s.direct ? 'Operación directa del titular' : s.number + ' · ' + s.miner) + '</label>';
+        }).join('') + '</div>'
+      : '<div class="p-note">' + (d.kind === 'title' ? 'Este título no tiene subcontratos registrados todavía. Se creará la <b>operación directa del titular</b> para empezar su diagnóstico.' : 'Este subcontrato ya está en operación; la oportunidad solo queda como ganada.') + '</div>';
+    modal(
+      '<div class="win-badge">✓</div>' +
+      '<div><h3>Negocio ganado</h3><p class="p-sub">' + esc(dealLabel(d)) + ' · ' + esc(t.code) + ' · ' + fmtMoney(d.value) + '</p></div>' +
+      '<div class="f"><span>¿Qué entra a operación?</span>' + list + '<span class="hint">A cada uno se le crea su diagnóstico y aparece en la columna Diagnóstico de la pestaña Operación.</span></div>' +
+      '<label class="f"><span>Responsable de operación</span><select id="win-owner">' + OWNERS.map(function (o) { return '<option' + (o === d.owner ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select></label>' +
+      '<label class="f"><span>Fecha de cierre</span><input type="date" id="win-date" value="' + TODAY + '"></label>' +
+      '<div class="modal-actions"><button class="btn ghost sm" id="m-cancel">Cancelar</button><button class="btn sm" id="m-ok">Marcar como ganado</button></div>'
+    );
+    $('m-cancel').onclick = closeModal;
+    $('m-ok').onclick = function () {
+      var owner = $('win-owner').value;
+      var chosen = Array.prototype.map.call(document.querySelectorAll('input[name=win-sub]:checked'), function (i) { return +i.value; });
+      if (d.kind === 'title' && !candidates.length) {
+        var direct = { id: ++nextId, titleId: t.id, number: 'Operación directa', miner: t.holder, direct: true, owner: owner, hasDiag: false };
+        subs.push(direct); chosen = [direct.id];
+      }
+      chosen.forEach(function (sid) { var s = subById(sid); s.hasDiag = true; s.opStage = 'diagnosis'; s.maturity = 0; s.risk = 'high'; s.autosLate = 0; s.owner = owner; });
+      d.stage = 'won'; d.prob = 100; d.close = $('win-date').value || TODAY; d.next = ''; d.nextDate = '';
+      closeModal(); render();
+      say(chosen.length ? '<b>' + chosen.length + '</b> ' + (chosen.length > 1 ? 'pasaron' : 'pasó') + ' a Operación con su diagnóstico creado.' : 'Oportunidad marcada como ganada.');
+    };
+  }
+
+  function askLost(d) {
+    modal(
+      '<div><h3>Marcar como perdido</h3><p class="p-sub">' + esc(dealLabel(d)) + ' · ' + fmtMoney(d.value) + '</p></div>' +
+      '<label class="f"><span>Motivo (obligatorio)</span><select id="lost-reason"><option value="">Elegí un motivo…</option>' + LOST_REASONS.map(function (r) { return '<option>' + r + '</option>'; }).join('') + '</select></label>' +
+      '<label class="f"><span>Comentario <span class="hint">opcional</span></span><textarea id="lost-note" placeholder="Qué pasó, si vale la pena retomarlo y cuándo"></textarea></label>' +
+      '<div class="modal-actions"><button class="btn ghost sm" id="m-cancel">Cancelar</button><button class="btn sm" id="m-ok" disabled>Marcar como perdido</button></div>'
+    );
+    $('lost-reason').onchange = function () { $('m-ok').disabled = !this.value; };
+    $('m-cancel').onclick = closeModal;
+    $('m-ok').onclick = function () {
+      d.stage = 'lost'; d.prob = 0; d.lostReason = $('lost-reason').value + ($('lost-note').value ? ' — ' + $('lost-note').value : '');
+      closeModal(); render(); say('Oportunidad marcada como <b>perdida</b>.');
+    };
+  }
+
+  // ---------------- panel lateral ----------------
+  function openPanel(title, sub, body, foot) {
+    $('p-title').textContent = title; $('p-sub').textContent = sub || '';
+    $('p-body').innerHTML = body; $('p-foot').innerHTML = foot;
+    $('panel').classList.add('on'); $('scrim').classList.add('on'); $('panel').setAttribute('aria-hidden', 'false');
+  }
+  function closePanel() { $('panel').classList.remove('on'); $('scrim').classList.remove('on'); $('panel').setAttribute('aria-hidden', 'true'); }
+  function val(id) { var el = $(id); return el ? el.value.trim() : ''; }
+  function opts(list, sel, empty) { return (empty ? '<option value="">' + empty + '</option>' : '') + list.map(function (o) { var v = typeof o === 'object' ? o.v : o, l = typeof o === 'object' ? o.l : o; return '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); }
+  function deleteBlock(label, note) {
+    return '<div class="confirm-box" id="del-box">' + note + '<div class="actions" style="margin-top:8px"><button class="btn ghost sm" id="del-no">Cancelar</button><button class="btn danger sm" id="del-yes">' + label + '</button></div></div>';
+  }
+  function wireDelete(onYes) {
+    $('btn-del').onclick = function () { $('del-box').classList.add('on'); };
+    $('del-no').onclick = function () { $('del-box').classList.remove('on'); };
+    $('del-yes').onclick = onYes;
+  }
+
+  // título
+  function openTitle(id) {
+    var t = id ? titleById(id) : { code: '', holder: '', mun: '', dep: 'Antioquia', mineral: 'Oro', notes: '' };
+    var tSubs = id ? subs.filter(function (s) { return s.titleId === id; }) : [];
+    var body =
+      '<div class="row2"><label class="f"><span>Expediente / placa</span><input id="t-code" value="' + esc(t.code) + '" placeholder="ABC-12345"></label>' +
+      '<label class="f"><span>Mineral</span><input id="t-mineral" value="' + esc(t.mineral) + '"></label></div>' +
+      '<label class="f"><span>Titular</span><input id="t-holder" value="' + esc(t.holder) + '" placeholder="Razón social o persona natural"></label>' +
+      '<div class="row2"><label class="f"><span>Municipio</span><input id="t-mun" value="' + esc(t.mun) + '"></label>' +
+      '<label class="f"><span>Departamento</span><input id="t-dep" value="' + esc(t.dep) + '"></label></div>' +
+      '<label class="f"><span>Notas</span><textarea id="t-notes">' + esc(t.notes) + '</textarea></label>' +
+      (id ? '<div class="f"><span>Subcontratos de este título (' + tSubs.length + ')</span><div class="p-list">' +
+        (tSubs.length ? tSubs.map(function (s) {
+          return '<div class="it"><div>' + esc(s.direct ? 'Operación directa' : s.number) + '<small>' + esc(s.miner) + ' · ' + (s.hasDiag ? stageLabel(OPS_STAGES, s.opStage) : 'aún sin diagnóstico') + '</small></div><button class="cx-link" data-edit-sub="' + s.id + '">Editar</button></div>';
+        }).join('') : '<div class="p-note">Sin subcontratos todavía.</div>') +
+        '</div><button class="lane-add" type="button" id="t-add-sub" style="align-self:flex-start">+ Agregar subcontrato</button></div>' +
+        '<div class="p-note">Los autos de la ANM se buscan con este expediente y los heredan todos sus subcontratos.</div>' : '') +
+      (id ? deleteBlock('Eliminar título', 'Se elimina el título <b>' + esc(t.code) + '</b> y sus oportunidades perdidas. No se puede deshacer.') : '');
+    var blocked = tSubs.length > 0;
+    var foot = (id ? '<button class="btn danger sm" id="btn-del"' + (blocked ? ' disabled title="Primero eliminá o mové sus subcontratos"' : '') + '>Eliminar</button>' : '<span></span>') +
+      '<div style="display:flex;gap:8px"><button class="btn ghost sm" id="p-cancel">Cancelar</button><button class="btn sm" id="p-save">' + (id ? 'Guardar' : 'Registrar título') + '</button></div>';
+    openPanel(id ? 'Título ' + t.code : 'Nuevo título', id ? t.holder : 'El título es el padre de sus subcontratos', body, foot);
+    if (blocked) $('p-foot').insertAdjacentHTML('afterbegin', '');
+    $('p-cancel').onclick = closePanel;
+    $('p-save').onclick = function () {
+      if (!val('t-code') || !val('t-holder')) { say('Expediente y titular son obligatorios.'); return; }
+      var data = { code: val('t-code'), holder: val('t-holder'), mun: val('t-mun'), dep: val('t-dep'), mineral: val('t-mineral'), notes: val('t-notes') };
+      if (id) Object.assign(t, data); else titles.push(Object.assign({ id: ++nextId }, data));
+      closePanel(); render(); fillFilters(); say(id ? 'Título actualizado.' : 'Título <b>' + esc(data.code) + '</b> registrado. Agregale subcontratos u oportunidades.');
+    };
+    if (id) {
+      if (blocked) { $('btn-del').insertAdjacentHTML('afterend', ''); $('p-body').insertAdjacentHTML('beforeend', '<div class="p-note">No se puede eliminar un título con subcontratos: primero eliminá cada subcontrato. Así nunca se borra un diagnóstico por accidente.</div>'); }
+      else wireDelete(function () {
+        titles = titles.filter(function (x) { return x.id !== id; }); deals = deals.filter(function (d) { return d.titleId !== id; });
+        closePanel(); render(); fillFilters(); say('Título eliminado.');
+      });
+      $('t-add-sub').onclick = function () { openSub(null, id); };
+      $('p-body').querySelectorAll('[data-edit-sub]').forEach(function (b) { b.onclick = function () { openSub(+b.dataset.editSub); }; });
+    }
+  }
+
+  // subcontrato
+  function openSub(id, titleId) {
+    var s = id ? subById(id) : { titleId: titleId || titles[0].id, number: '', miner: '', direct: false, owner: '', hasDiag: false };
+    var t = titleById(s.titleId);
+    var body =
+      '<label class="f"><span>Título padre</span><select id="s-title"' + (id && s.hasDiag ? ' disabled' : '') + '>' + opts(titles.map(function (x) { return { v: x.id, l: x.code + ' · ' + x.holder }; }), s.titleId) + '</select>' +
+      (id && s.hasDiag ? '<span class="hint">Con diagnóstico en curso no se cambia de título.</span>' : '') + '</label>' +
+      '<label class="f" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="s-direct"' + (s.direct ? ' checked' : '') + ' style="width:auto"> <span>Es la operación directa del titular (sin subcontrato)</span></label>' +
+      '<div class="row2"><label class="f"><span>N.º de subcontrato</span><input id="s-number" value="' + esc(s.direct ? '' : s.number) + '" placeholder="Sub. 004-2026"></label>' +
+      '<label class="f"><span>Responsable</span><select id="s-owner">' + opts(OWNERS, s.owner, 'Sin asignar') + '</select></label></div>' +
+      '<label class="f"><span>Minero o grupo subcontratista</span><input id="s-miner" value="' + esc(s.miner) + '" placeholder="Asociación, cooperativa o persona"></label>' +
+      (id ? '<div class="p-note">' + (s.hasDiag ? 'En operación: <b>' + stageLabel(OPS_STAGES, s.opStage) + '</b> · madurez ' + s.maturity + ' / 100.' : 'Todavía sin diagnóstico: se crea al ganar su oportunidad.') + '</div>' : '') +
+      (id ? deleteBlock('Eliminar subcontrato', s.hasDiag
+        ? 'Este subcontrato tiene <b>diagnóstico</b> (cuestionario, visita, evidencias y plan). En el sistema real se pedirá el código que llega por correo, como hoy al borrar un proyecto.'
+        : 'Se elimina el subcontrato y sus oportunidades.') : '');
+    var foot = (id ? '<button class="btn danger sm" id="btn-del">Eliminar</button>' : '<span></span>') +
+      '<div style="display:flex;gap:8px"><button class="btn ghost sm" id="p-cancel">Cancelar</button><button class="btn sm" id="p-save">' + (id ? 'Guardar' : 'Agregar subcontrato') + '</button></div>';
+    openPanel(id ? (s.direct ? 'Operación directa' : s.number) : 'Nuevo subcontrato', t.code + ' · ' + t.holder, body, foot);
+    $('p-cancel').onclick = closePanel;
+    $('p-save').onclick = function () {
+      var direct = $('s-direct').checked;
+      if (!val('s-miner') || (!direct && !val('s-number'))) { say('Número y minero son obligatorios.'); return; }
+      var data = { titleId: +$('s-title').value, direct: direct, number: direct ? 'Operación directa' : val('s-number'), miner: val('s-miner'), owner: val('s-owner') };
+      if (id) Object.assign(s, data); else subs.push(Object.assign({ id: ++nextId, hasDiag: false }, data));
+      closePanel(); render(); say(id ? 'Subcontrato actualizado.' : 'Subcontrato agregado. Para que entre a operación, creale una oportunidad y ganala.');
+    };
+    if (id) wireDelete(function () {
+      subs = subs.filter(function (x) { return x.id !== id; }); deals = deals.filter(function (d) { return d.subId !== id; });
+      closePanel(); render(); say('Subcontrato eliminado.');
+    });
+  }
+
+  // oportunidad
+  function openDeal(id, titleId) {
+    var d = id ? deals.find(function (x) { return x.id === id; }) : { titleId: titleId || titles[0].id, subId: null, kind: 'title', services: ['Formalización'], value: 0, pay: 'Honorarios', prob: 10, close: '', owner: OWNERS[0], next: '', nextDate: '', stage: 'prospect' };
+    function subOptions(tid) {
+      return opts(subs.filter(function (s) { return s.titleId === +tid; }).map(function (s) { return { v: s.id, l: s.direct ? 'Operación directa' : s.number + ' · ' + s.miner }; }), d.subId, 'Elegí un subcontrato…') + '<option value="new">+ Subcontrato nuevo…</option>';
+    }
+    var closed = d.stage === 'won' || d.stage === 'lost';
+    var body =
+      '<div class="f"><span>¿Con quién es el negocio?</span><div class="seg">' +
+        '<label><input type="radio" name="kind" value="title"' + (d.kind === 'title' ? ' checked' : '') + (id ? ' disabled' : '') + '>Con el titular del título</label>' +
+        '<label><input type="radio" name="kind" value="sub"' + (d.kind === 'sub' ? ' checked' : '') + (id ? ' disabled' : '') + '>Con un subcontrato</label></div></div>' +
+      '<label class="f"><span>Título</span><select id="d-title"' + (id ? ' disabled' : '') + '>' + opts(titles.map(function (x) { return { v: x.id, l: x.code + ' · ' + x.holder }; }), d.titleId) + '<option value="new">+ Título nuevo…</option></select></label>' +
+      '<div id="new-title" style="display:none" class="row2"><label class="f"><span>Expediente</span><input id="nt-code"></label><label class="f"><span>Titular</span><input id="nt-holder"></label></div>' +
+      '<label class="f" id="sub-wrap"' + (d.kind === 'sub' ? '' : ' style="display:none"') + '><span>Subcontrato</span><select id="d-sub"' + (id ? ' disabled' : '') + '>' + subOptions(d.titleId) + '</select></label>' +
+      '<div id="new-sub" style="display:none" class="row2"><label class="f"><span>N.º de subcontrato</span><input id="ns-number" placeholder="o «Frente 1» si aún no tiene"></label><label class="f"><span>Minero o grupo</span><input id="ns-miner"></label></div>' +
+      '<div class="f"><span>Servicios</span><div class="checks">' + SERVICES.map(function (sv) { return '<label><input type="checkbox" name="svc" value="' + sv + '"' + (d.services.indexOf(sv) !== -1 ? ' checked' : '') + '>' + sv + '</label>'; }).join('') + '</div></div>' +
+      '<div class="row2"><label class="f"><span>Valor estimado (COP)</span><input id="d-value" type="number" step="1000000" value="' + d.value + '"></label>' +
+      '<label class="f"><span>Forma de pago</span><select id="d-pay">' + opts(PAYMENT, d.pay) + '</select></label></div>' +
+      '<div class="row2"><label class="f"><span>Probabilidad de cierre</span><select id="d-prob"' + (closed ? ' disabled' : '') + '>' + opts([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(function (p) { return { v: p, l: p + ' %' }; }), d.prob) + '</select></label>' +
+      '<label class="f"><span>' + (closed ? 'Fecha de cierre' : 'Cierre esperado') + '</span><input id="d-close" type="date" value="' + d.close + '"></label></div>' +
+      '<div class="row2"><label class="f"><span>Responsable comercial</span><select id="d-owner">' + opts(OWNERS, d.owner) + '</select></label>' +
+      '<label class="f"><span>Etapa</span><select id="d-stage"' + (closed ? ' disabled' : '') + '>' + opts(COM_STAGES.filter(function (s) { return closed || (s.id !== 'won' && s.id !== 'lost'); }).map(function (s) { return { v: s.id, l: s.label }; }), d.stage) + '</select>' + (closed ? '' : '<span class="hint">Para Ganado o Perdido, arrastrá la ficha.</span>') + '</label></div>' +
+      (closed ? '' : '<div class="row2"><label class="f"><span>Próxima acción</span><input id="d-next" value="' + esc(d.next) + '" placeholder="Llamar, visitar, enviar propuesta…"></label><label class="f"><span>Fecha</span><input id="d-nextdate" type="date" value="' + d.nextDate + '"></label></div>') +
+      (d.stage === 'lost' ? '<div class="p-note">Motivo de pérdida: <b>' + esc(d.lostReason) + '</b></div>' : '') +
+      (id ? deleteBlock('Eliminar oportunidad', 'Se elimina esta oportunidad. El título y sus subcontratos no se tocan.') : '');
+    var foot = (id ? '<button class="btn danger sm" id="btn-del">Eliminar</button>' : '<span></span>') +
+      '<div style="display:flex;gap:8px"><button class="btn ghost sm" id="p-cancel">Cancelar</button><button class="btn sm" id="p-save">' + (id ? 'Guardar' : 'Crear oportunidad') + '</button></div>';
+    var t = titleById(d.titleId);
+    openPanel(id ? dealLabel(d) : 'Nueva oportunidad', id ? t.code + ' · ' + stageLabel(COM_STAGES, d.stage) : 'Entra en Prospecto salvo que elijas otra etapa', body, foot);
+
+    function syncKind() {
+      var kind = document.querySelector('input[name=kind]:checked').value;
+      $('sub-wrap').style.display = kind === 'sub' ? '' : 'none';
+      $('new-sub').style.display = kind === 'sub' && $('d-sub').value === 'new' ? '' : 'none';
+    }
+    if (!id) {
+      document.querySelectorAll('input[name=kind]').forEach(function (r) { r.onchange = syncKind; });
+      $('d-title').onchange = function () {
+        var isNew = this.value === 'new';
+        $('new-title').style.display = isNew ? '' : 'none';
+        $('d-sub').innerHTML = isNew ? '<option value="new" selected>+ Subcontrato nuevo…</option>' : subOptions(this.value);
+        syncKind();
+      };
+      $('d-sub').onchange = syncKind;
+    }
+    $('p-cancel').onclick = closePanel;
+    $('p-save').onclick = function () {
+      var svcs = Array.prototype.map.call(document.querySelectorAll('input[name=svc]:checked'), function (i) { return i.value; });
+      if (!svcs.length) { say('Elegí al menos un servicio.'); return; }
+      if (!id) {
+        var kind = document.querySelector('input[name=kind]:checked').value;
+        var tid = $('d-title').value;
+        if (tid === 'new') {
+          if (!val('nt-code') || !val('nt-holder')) { say('Del título nuevo, expediente y titular son obligatorios.'); return; }
+          var nt = { id: ++nextId, code: val('nt-code'), holder: val('nt-holder'), mun: '', dep: '', mineral: '', notes: '' };
+          titles.push(nt); tid = nt.id;
+        } else tid = +tid;
+        var sid = null;
+        if (kind === 'sub') {
+          if ($('d-sub').value === 'new') {
+            if (!val('ns-number') || !val('ns-miner')) { say('Del subcontrato nuevo, número y minero son obligatorios.'); return; }
+            var ns = { id: ++nextId, titleId: tid, number: val('ns-number'), miner: val('ns-miner'), direct: false, owner: '', hasDiag: false };
+            subs.push(ns); sid = ns.id;
+          } else if (!$('d-sub').value) { say('Elegí el subcontrato.'); return; }
+          else sid = +$('d-sub').value;
+        }
+        d = { id: ++nextId, titleId: tid, subId: sid, kind: kind, lostReason: '' };
+        deals.push(d);
+      }
+      d.services = svcs; d.value = +val('d-value') || 0; d.pay = val('d-pay'); d.close = val('d-close'); d.owner = val('d-owner');
+      if (!closed) { d.prob = +val('d-prob'); d.stage = val('d-stage'); d.next = val('d-next'); d.nextDate = val('d-nextdate'); }
+      closePanel(); render(); fillFilters(); say(id ? 'Oportunidad actualizada.' : 'Oportunidad creada en <b>' + stageLabel(COM_STAGES, d.stage) + '</b>.');
+    };
+    if (id) wireDelete(function () { deals = deals.filter(function (x) { return x.id !== id; }); closePanel(); render(); say('Oportunidad eliminada.'); });
+  }
+
+  // ---------------- arranque ----------------
+  function fillFilters() {
+    var o = $('f-owner'), m = $('f-mun'), so = o.value, sm = m.value;
+    o.innerHTML = '<option value="">Todos</option>' + opts(OWNERS, so);
+    var muns = titles.map(function (t) { return t.mun; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; }).sort();
+    m.innerHTML = '<option value="">Todos</option>' + opts(muns, sm);
+  }
+
+  document.querySelectorAll('.tab').forEach(function (b) { b.onclick = function () { state.tab = b.dataset.tab; render(); }; });
+  $('q').oninput = function () { state.q = this.value; renderBoard(); };
+  $('f-owner').onchange = function () { state.owner = this.value; renderBoard(); };
+  $('f-mun').onchange = function () { state.mun = this.value; renderBoard(); };
+  $('btn-collapse').onclick = function () {
+    state.allCollapsed = !state.allCollapsed;
+    titles.forEach(function (t) { state.collapsed[t.id] = state.allCollapsed; });
+    this.textContent = state.allCollapsed ? 'Expandir franjas' : 'Contraer franjas';
+    renderBoard();
+  };
+  $('btn-new-title').onclick = function () { openTitle(null); };
+  $('btn-new-main').onclick = function () { if (state.tab === 'com') openDeal(null); else openSub(null); };
+  $('p-close').onclick = closePanel;
+  $('scrim').onclick = closePanel;
+  $('modal').onclick = function (e) { if (e.target === this) closeModal(); };
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeModal(); closePanel(); } });
+
+  fillFilters();
+  render();
+})();
+</script>
+</body>
+</html>
